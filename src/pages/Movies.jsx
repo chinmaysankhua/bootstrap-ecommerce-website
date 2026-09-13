@@ -3,22 +3,68 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 const API_URL = "https://swapi.info/api/films";
 
 function Movies() {
+  // -----------------------------
+  // Add Movie Form State
+  // -----------------------------
+  const [movieForm, setMovieForm] = useState({
+    title: "",
+    openingText: "",
+    releaseDate: "",
+  });
+
+  // -----------------------------
+  // Movies API State
+  // -----------------------------
   const [movies, setMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Stores the timeout ID
+  // -----------------------------
+  // Retry Management
+  // -----------------------------
   const retryTimeoutRef = useRef(null);
-
-  // Tells us whether the user cancelled retrying
   const cancelRetryRef = useRef(false);
 
-  /*
-    API function
+  // -----------------------------
+  // Form Input Handler
+  // -----------------------------
+  const handleInputChange = useCallback((event) => {
+    const { name, value } = event.target;
 
-    This function only handles the API request.
-    Retry scheduling is handled separately by useEffect.
-  */
+    setMovieForm((previousForm) => ({
+      ...previousForm,
+      [name]: value,
+    }));
+  }, []);
+
+  // -----------------------------
+  // Add Movie Handler
+  // -----------------------------
+  const handleAddMovie = useCallback(
+    (event) => {
+      event.preventDefault();
+
+      const NewMovieObj = {
+        title: movieForm.title,
+        openingText: movieForm.openingText,
+        releaseDate: movieForm.releaseDate,
+      };
+
+      console.log(NewMovieObj);
+
+      // Clear form after adding
+      setMovieForm({
+        title: "",
+        openingText: "",
+        releaseDate: "",
+      });
+    },
+    [movieForm],
+  );
+
+  // -----------------------------
+  // API Request
+  // -----------------------------
   const fetchMovies = useCallback(async () => {
     try {
       setError("");
@@ -42,10 +88,9 @@ function Movies() {
     }
   }, []);
 
-  /*
-    Fetch movies automatically when the component loads.
-    If the API fails, retry every 5 seconds.
-  */
+  // -----------------------------
+  // Fetch + Retry Logic
+  // -----------------------------
   useEffect(() => {
     let isMounted = true;
 
@@ -68,10 +113,8 @@ function Movies() {
         return;
       }
 
-      // API failed
       setError("Something went wrong ....Retrying");
 
-      // Retry after 5 seconds
       retryTimeoutRef.current = setTimeout(() => {
         fetchWithRetry();
       }, 5000);
@@ -81,26 +124,54 @@ function Movies() {
 
     fetchWithRetry();
 
-    // Cleanup
     return () => {
       isMounted = false;
       cancelRetryRef.current = true;
 
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
     };
   }, [fetchMovies]);
 
-  /*
-    Cancel retrying
-  */
+  // -----------------------------
+  // Fetch Movies Button
+  // -----------------------------
+  const handleFetchMovies = useCallback(() => {
+    cancelRetryRef.current = false;
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
+    const fetchAgain = async () => {
+      setIsLoading(true);
+      setError("");
+
+      const success = await fetchMovies();
+
+      if (!success && !cancelRetryRef.current) {
+        setError("Something went wrong ....Retrying");
+
+        retryTimeoutRef.current = setTimeout(() => {
+          fetchAgain();
+        }, 5000);
+      }
+    };
+
+    fetchAgain();
+  }, [fetchMovies]);
+
+  // -----------------------------
+  // Cancel Retry
+  // -----------------------------
   const handleCancelRetry = useCallback(() => {
     cancelRetryRef.current = true;
 
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
-
       retryTimeoutRef.current = null;
     }
 
@@ -108,11 +179,9 @@ function Movies() {
     setError("");
   }, []);
 
-  /*
-    Memoized movie list
-
-    It will only be recalculated when movies changes.
-  */
+  // -----------------------------
+  // Memoized Movie List
+  // -----------------------------
   const movieList = useMemo(() => {
     return movies.map((movie) => (
       <div className="col-md-6 col-lg-4 mb-4" key={movie.episode_id}>
@@ -149,10 +218,86 @@ function Movies() {
 
   return (
     <div className="container py-5">
-      <h1 className="text-center mb-5">Star Wars Movies</h1>
+      {/* =================================
+          ADD MOVIE FORM
+      ================================= */}
+      <div className="card shadow-sm p-4 mb-4">
+        <form onSubmit={handleAddMovie}>
+          {/* Title */}
+          <div className="mb-3">
+            <label htmlFor="title" className="form-label fw-bold">
+              Title
+            </label>
 
-      {/* LOADING */}
+            <input
+              type="text"
+              id="title"
+              name="title"
+              className="form-control"
+              value={movieForm.title}
+              onChange={handleInputChange}
+            />
+          </div>
 
+          {/* Opening Text */}
+          <div className="mb-3">
+            <label htmlFor="openingText" className="form-label fw-bold">
+              Opening Text
+            </label>
+
+            <textarea
+              id="openingText"
+              name="openingText"
+              className="form-control"
+              rows="5"
+              value={movieForm.openingText}
+              onChange={handleInputChange}
+            />
+          </div>
+
+          {/* Release Date */}
+          <div className="mb-4">
+            <label htmlFor="releaseDate" className="form-label fw-bold">
+              Release Date
+            </label>
+
+            <input
+              type="text"
+              id="releaseDate"
+              name="releaseDate"
+              className="form-control"
+              value={movieForm.releaseDate}
+              onChange={handleInputChange}
+            />
+          </div>
+
+          {/* Add Movie Button */}
+          <div className="text-center">
+            <button type="submit" className="btn btn-primary px-5">
+              Add Movie
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* =================================
+          FETCH MOVIES BUTTON
+      ================================= */}
+      <div className="card shadow-sm p-4 mb-4">
+        <div className="text-center">
+          <button
+            className="btn btn-primary px-5"
+            onClick={handleFetchMovies}
+            disabled={isLoading}
+          >
+            Fetch Movies
+          </button>
+        </div>
+      </div>
+
+      {/* =================================
+          LOADING / ERROR
+      ================================= */}
       {isLoading && (
         <div className="text-center my-5">
           <div
@@ -183,8 +328,9 @@ function Movies() {
         </div>
       )}
 
-      {/* MOVIES */}
-
+      {/* =================================
+          MOVIES
+      ================================= */}
       {!isLoading && movies.length > 0 && (
         <div className="row">{movieList}</div>
       )}
