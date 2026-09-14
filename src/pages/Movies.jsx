@@ -1,231 +1,366 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
-const API_URL = "https://swapi.info/api/films";
+const FIREBASE_URL =
+  'https://react-ecommerce-project-3fc57-default-rtdb.firebaseio.com'
+
+const MOVIES_URL = `${FIREBASE_URL}/movies`
+const SWAPI_URL = 'https://swapi.info/api/films'
 
 function Movies() {
-  // -----------------------------
-  // Add Movie Form State
-  // -----------------------------
   const [movieForm, setMovieForm] = useState({
-    title: "",
-    openingText: "",
-    releaseDate: "",
-  });
+    title: '',
+    releaseDate: '',
+  })
 
-  // -----------------------------
-  // Movies API State
-  // -----------------------------
-  const [movies, setMovies] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [movies, setMovies] = useState([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // -----------------------------
-  // Retry Management
-  // -----------------------------
-  const retryTimeoutRef = useRef(null);
-  const cancelRetryRef = useRef(false);
+  const retryTimeoutRef = useRef(null)
+  const cancelRetryRef = useRef(false)
 
-  // -----------------------------
-  // Form Input Handler
-  // -----------------------------
   const handleInputChange = useCallback((event) => {
-    const { name, value } = event.target;
+    const { name, value } = event.target
 
     setMovieForm((previousForm) => ({
       ...previousForm,
       [name]: value,
-    }));
-  }, []);
+    }))
+  }, [])
 
-  // -----------------------------
-  // Add Movie Handler
-  // -----------------------------
+  const fetchFirebaseMovies = useCallback(
+    async () => {
+      try {
+        const response = await fetch(
+          `${MOVIES_URL}.json`
+        )
+
+        if (!response.ok) {
+          throw new Error(
+            'Failed to fetch Firebase movies'
+          )
+        }
+
+        const data = await response.json()
+
+        if (!data) {
+          return []
+        }
+
+        return Object.entries(data).map(
+          ([id, movie]) => ({
+            id,
+            title: movie.title,
+            releaseDate: movie.releaseDate,
+            source: 'firebase',
+          })
+        )
+      } catch (error) {
+        console.error(
+          'Error fetching Firebase movies:',
+          error
+        )
+
+        return []
+      }
+    },
+    []
+  )
+
+  const fetchSWAPIMovies = useCallback(
+    async () => {
+      const response = await fetch(SWAPI_URL)
+
+      if (!response.ok) {
+        throw new Error(
+          'Failed to fetch SWAPI movies'
+        )
+      }
+
+      const data = await response.json()
+
+      return data.map((movie) => ({
+        id: movie.episode_id,
+        title: movie.title,
+        releaseDate: movie.release_date,
+        source: 'api',
+      }))
+    },
+    []
+  )
+
+  const loadMovies = useCallback(async () => {
+    const [firebaseMovies, apiMovies] =
+      await Promise.all([
+        fetchFirebaseMovies(),
+        fetchSWAPIMovies(),
+      ])
+
+    setMovies([
+      ...apiMovies,
+      ...firebaseMovies,
+    ])
+  }, [fetchFirebaseMovies, fetchSWAPIMovies])
+
   const handleAddMovie = useCallback(
-    (event) => {
-      event.preventDefault();
+    async (event) => {
+      event.preventDefault()
 
       const NewMovieObj = {
         title: movieForm.title,
-        openingText: movieForm.openingText,
         releaseDate: movieForm.releaseDate,
-      };
-
-      console.log(NewMovieObj);
-
-      // Clear form after adding
-      setMovieForm({
-        title: "",
-        openingText: "",
-        releaseDate: "",
-      });
-    },
-    [movieForm],
-  );
-
-  // -----------------------------
-  // API Request
-  // -----------------------------
-  const fetchMovies = useCallback(async () => {
-    try {
-      setError("");
-
-      const response = await fetch(API_URL);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch movies");
       }
 
-      const data = await response.json();
+      console.log(NewMovieObj)
 
-      setMovies(data);
-      setIsLoading(false);
+      try {
+        const response = await fetch(
+          `${MOVIES_URL}.json`,
+          {
+            method: 'POST',
+            body: JSON.stringify(NewMovieObj),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        )
 
-      return true;
-    } catch (error) {
-      console.error("Error fetching movies:", error);
+        if (!response.ok) {
+          throw new Error('Failed to add movie')
+        }
 
-      return false;
+        const data = await response.json()
+
+        const newMovie = {
+          id: data.name,
+          ...NewMovieObj,
+          source: 'firebase',
+        }
+
+        setMovies((previousMovies) => [
+          ...previousMovies,
+          newMovie,
+        ])
+
+        setMovieForm({
+          title: '',
+          releaseDate: '',
+        })
+      } catch (error) {
+        console.error(
+          'Error adding movie:',
+          error
+        )
+      }
+    },
+    [movieForm]
+  )
+
+  const handleDeleteMovie = useCallback(
+    async (movieId) => {
+      try {
+        const response = await fetch(
+          `${MOVIES_URL}/${movieId}.json`,
+          {
+            method: 'DELETE',
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error(
+            'Failed to delete movie'
+          )
+        }
+
+        setMovies((previousMovies) =>
+          previousMovies.filter(
+            (movie) => movie.id !== movieId
+          )
+        )
+      } catch (error) {
+        console.error(
+          'Error deleting movie:',
+          error
+        )
+      }
+    },
+    []
+  )
+
+  const handleFetchMovies = useCallback(() => {
+    cancelRetryRef.current = false
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+      retryTimeoutRef.current = null
     }
-  }, []);
-
-  // -----------------------------
-  // Fetch + Retry Logic
-  // -----------------------------
-  useEffect(() => {
-    let isMounted = true;
 
     const fetchWithRetry = async () => {
-      if (!isMounted || cancelRetryRef.current) {
-        return;
+      if (cancelRetryRef.current) {
+        return
       }
 
-      setIsLoading(true);
+      setIsLoading(true)
+      setError('')
 
-      const success = await fetchMovies();
+      try {
+        const apiMovies = await fetchSWAPIMovies()
 
-      if (!isMounted || cancelRetryRef.current) {
-        return;
+        if (cancelRetryRef.current) {
+          return
+        }
+
+        setMovies((previousMovies) => {
+          const firebaseMovies =
+            previousMovies.filter(
+              (movie) => movie.source === 'firebase'
+            )
+
+          return [
+            ...apiMovies,
+            ...firebaseMovies,
+          ]
+        })
+
+        setIsLoading(false)
+      } catch (error) {
+        console.error(
+          'Error fetching movies:',
+          error
+        )
+
+        if (cancelRetryRef.current) {
+          return
+        }
+
+        setError(
+          'Something went wrong ....Retrying'
+        )
+
+        retryTimeoutRef.current = setTimeout(
+          fetchWithRetry,
+          5000
+        )
       }
+    }
 
-      if (success) {
-        setError("");
-        setIsLoading(false);
-        return;
+    fetchWithRetry()
+  }, [fetchSWAPIMovies])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const fetchInitialMovies = async () => {
+      setIsLoading(true)
+
+      try {
+        const [firebaseMovies, apiMovies] =
+          await Promise.all([
+            fetchFirebaseMovies(),
+            fetchSWAPIMovies(),
+          ])
+
+        if (!isMounted) {
+          return
+        }
+
+        setMovies([
+          ...apiMovies,
+          ...firebaseMovies,
+        ])
+
+        setIsLoading(false)
+      } catch (error) {
+        console.error(
+          'Error loading movies:',
+          error
+        )
+
+        if (!isMounted) {
+          return
+        }
+
+        setError(
+          'Something went wrong ....Retrying'
+        )
+
+        setIsLoading(false)
       }
+    }
 
-      setError("Something went wrong ....Retrying");
-
-      retryTimeoutRef.current = setTimeout(() => {
-        fetchWithRetry();
-      }, 5000);
-    };
-
-    cancelRetryRef.current = false;
-
-    fetchWithRetry();
+    fetchInitialMovies()
 
     return () => {
-      isMounted = false;
-      cancelRetryRef.current = true;
+      isMounted = false
+      cancelRetryRef.current = true
 
       if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
       }
-    };
-  }, [fetchMovies]);
-
-  // -----------------------------
-  // Fetch Movies Button
-  // -----------------------------
-  const handleFetchMovies = useCallback(() => {
-    cancelRetryRef.current = false;
-
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = null;
     }
+  }, [fetchFirebaseMovies, fetchSWAPIMovies])
 
-    const fetchAgain = async () => {
-      setIsLoading(true);
-      setError("");
-
-      const success = await fetchMovies();
-
-      if (!success && !cancelRetryRef.current) {
-        setError("Something went wrong ....Retrying");
-
-        retryTimeoutRef.current = setTimeout(() => {
-          fetchAgain();
-        }, 5000);
-      }
-    };
-
-    fetchAgain();
-  }, [fetchMovies]);
-
-  // -----------------------------
-  // Cancel Retry
-  // -----------------------------
   const handleCancelRetry = useCallback(() => {
-    cancelRetryRef.current = true;
+    cancelRetryRef.current = true
 
     if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = null;
+      clearTimeout(retryTimeoutRef.current)
+      retryTimeoutRef.current = null
     }
 
-    setIsLoading(false);
-    setError("");
-  }, []);
+    setIsLoading(false)
+    setError('')
+  }, [])
 
-  // -----------------------------
-  // Memoized Movie List
-  // -----------------------------
   const movieList = useMemo(() => {
     return movies.map((movie) => (
-      <div className="col-md-6 col-lg-4 mb-4" key={movie.episode_id}>
+      <div
+        className="col-md-6 col-lg-4 mb-4"
+        key={`${movie.source}-${movie.id}`}
+      >
         <div className="card h-100 shadow-sm">
           <div className="card-body">
-            <h3 className="card-title">{movie.title}</h3>
+            <h3 className="card-title">
+              {movie.title}
+            </h3>
 
             <p>
-              <strong>Episode:</strong> {movie.episode_id}
+              <strong>Release Date:</strong>{' '}
+              {movie.releaseDate}
             </p>
 
-            <p>
-              <strong>Director:</strong> {movie.director}
-            </p>
-
-            <p>
-              <strong>Producer:</strong> {movie.producer}
-            </p>
-
-            <p>
-              <strong>Release Date:</strong> {movie.release_date}
-            </p>
-
-            <p>
-              <strong>Opening Crawl:</strong>
-            </p>
-
-            <p className="text-muted">{movie.opening_crawl}</p>
+            {movie.source === 'firebase' && (
+              <button
+                className="btn btn-danger"
+                onClick={() =>
+                  handleDeleteMovie(movie.id)
+                }
+              >
+                Delete Movie
+              </button>
+            )}
           </div>
         </div>
       </div>
-    ));
-  }, [movies]);
+    ))
+  }, [movies, handleDeleteMovie])
 
   return (
     <div className="container py-5">
-      {/* =================================
-          ADD MOVIE FORM
-      ================================= */}
       <div className="card shadow-sm p-4 mb-4">
         <form onSubmit={handleAddMovie}>
-          {/* Title */}
           <div className="mb-3">
-            <label htmlFor="title" className="form-label fw-bold">
+            <label
+              htmlFor="title"
+              className="form-label fw-bold"
+            >
               Title
             </label>
 
@@ -236,28 +371,15 @@ function Movies() {
               className="form-control"
               value={movieForm.title}
               onChange={handleInputChange}
+              required
             />
           </div>
 
-          {/* Opening Text */}
-          <div className="mb-3">
-            <label htmlFor="openingText" className="form-label fw-bold">
-              Opening Text
-            </label>
-
-            <textarea
-              id="openingText"
-              name="openingText"
-              className="form-control"
-              rows="5"
-              value={movieForm.openingText}
-              onChange={handleInputChange}
-            />
-          </div>
-
-          {/* Release Date */}
           <div className="mb-4">
-            <label htmlFor="releaseDate" className="form-label fw-bold">
+            <label
+              htmlFor="releaseDate"
+              className="form-label fw-bold"
+            >
               Release Date
             </label>
 
@@ -268,21 +390,21 @@ function Movies() {
               className="form-control"
               value={movieForm.releaseDate}
               onChange={handleInputChange}
+              required
             />
           </div>
 
-          {/* Add Movie Button */}
           <div className="text-center">
-            <button type="submit" className="btn btn-primary px-5">
+            <button
+              type="submit"
+              className="btn btn-primary px-5"
+            >
               Add Movie
             </button>
           </div>
         </form>
       </div>
 
-      {/* =================================
-          FETCH MOVIES BUTTON
-      ================================= */}
       <div className="card shadow-sm p-4 mb-4">
         <div className="text-center">
           <button
@@ -295,25 +417,26 @@ function Movies() {
         </div>
       </div>
 
-      {/* =================================
-          LOADING / ERROR
-      ================================= */}
       {isLoading && (
         <div className="text-center my-5">
           <div
             className="spinner-border text-primary"
             style={{
-              width: "4rem",
-              height: "4rem",
+              width: '4rem',
+              height: '4rem',
             }}
             role="status"
           >
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">
+              Loading...
+            </span>
           </div>
 
           {error ? (
             <>
-              <p className="mt-3 text-danger">{error}</p>
+              <p className="mt-3 text-danger">
+                {error}
+              </p>
 
               <button
                 className="btn btn-danger mt-2"
@@ -323,19 +446,20 @@ function Movies() {
               </button>
             </>
           ) : (
-            <p className="mt-3">Fetching movies...</p>
+            <p className="mt-3">
+              Fetching movies...
+            </p>
           )}
         </div>
       )}
 
-      {/* =================================
-          MOVIES
-      ================================= */}
       {!isLoading && movies.length > 0 && (
-        <div className="row">{movieList}</div>
+        <div className="row">
+          {movieList}
+        </div>
       )}
     </div>
-  );
+  )
 }
 
-export default Movies;
+export default Movies
