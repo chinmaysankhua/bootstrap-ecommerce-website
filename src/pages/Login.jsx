@@ -1,5 +1,6 @@
 import { useCallback, useContext, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+
 import {
   Container,
   Row,
@@ -51,12 +52,15 @@ function Login() {
 
         if (!response.ok) {
           throw new Error(
-            data.error?.message ||
-              'Login failed'
+            data.error?.message || 'Login failed'
           )
         }
 
-        authCtx.login(data.idToken)
+        authCtx.login(
+          data.idToken,
+          data.localId,
+          data.email
+        )
 
         navigate('/store')
       } catch (error) {
@@ -65,9 +69,7 @@ function Login() {
           error.message === 'INVALID_PASSWORD' ||
           error.message === 'INVALID_LOGIN_CREDENTIALS'
         ) {
-          setError(
-            'Invalid email or password'
-          )
+          setError('Invalid email or password')
         } else {
           setError(
             'Something went wrong. Please try again.'

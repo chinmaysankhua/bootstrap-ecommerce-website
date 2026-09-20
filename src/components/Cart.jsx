@@ -1,4 +1,4 @@
-import { useContext } from 'react'
+import { useContext, useEffect } from 'react'
 
 import {
   Offcanvas,
@@ -9,7 +9,18 @@ import {
 import { CartContext } from '../context/CartContext'
 
 function Cart({ show, handleClose }) {
-  const { cart, removeFromCart } = useContext(CartContext)
+  const {
+    cart,
+    removeFromCart,
+    updateQuantity,
+    fetchCart,
+  } = useContext(CartContext)
+
+  useEffect(() => {
+    if (show) {
+      fetchCart()
+    }
+  }, [show, fetchCart])
 
   const total = cart.reduce(
     (total, item) =>
@@ -30,7 +41,6 @@ function Cart({ show, handleClose }) {
       </Offcanvas.Header>
 
       <Offcanvas.Body>
-
         <div className="d-flex justify-content-between border-bottom pb-2 mb-3">
           <strong>ITEM</strong>
           <strong>PRICE</strong>
@@ -42,17 +52,18 @@ function Cart({ show, handleClose }) {
             Your cart is empty.
           </p>
         ) : (
-          cart.map((item, index) => (
+          cart.map((item) => (
             <div
-              key={item.title}
+              key={item.id}
               className="mb-4"
             >
               <div className="d-flex justify-content-between align-items-center">
-
                 <div className="d-flex align-items-center gap-2">
-
                   <Image
-                    src={item.imageUrl}
+                    src={
+                      item.images?.[0] ||
+                      item.imageUrl
+                    }
                     width={60}
                     height={60}
                     rounded
@@ -67,23 +78,51 @@ function Cart({ show, handleClose }) {
                       ₹{item.price}
                     </div>
                   </div>
-
                 </div>
 
-                <div>
-                  {item.quantity}
+                <div className="d-flex align-items-center gap-2">
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() =>
+                      item.quantity > 1 &&
+                      updateQuantity(
+                        item.id,
+                        item.quantity - 1
+                      )
+                    }
+                    disabled={item.quantity === 1}
+                  >
+                    -
+                  </Button>
+
+                  <span>
+                    {item.quantity}
+                  </span>
+
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() =>
+                      updateQuantity(
+                        item.id,
+                        item.quantity + 1
+                      )
+                    }
+                  >
+                    +
+                  </Button>
                 </div>
 
                 <Button
                   variant="danger"
                   size="sm"
                   onClick={() =>
-                    removeFromCart(index)
+                    removeFromCart(item.id)
                   }
                 >
                   REMOVE
                 </Button>
-
               </div>
             </div>
           ))
@@ -102,7 +141,6 @@ function Cart({ show, handleClose }) {
             PURCHASE
           </Button>
         </div>
-
       </Offcanvas.Body>
     </Offcanvas>
   )
