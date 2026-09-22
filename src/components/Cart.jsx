@@ -1,4 +1,4 @@
-import { useContext, useEffect } from 'react'
+import { useContext } from 'react'
 
 import {
   Offcanvas,
@@ -13,14 +13,7 @@ function Cart({ show, handleClose }) {
     cart,
     removeFromCart,
     updateQuantity,
-    fetchCart,
   } = useContext(CartContext)
-
-  useEffect(() => {
-    if (show) {
-      fetchCart()
-    }
-  }, [show, fetchCart])
 
   const total = cart.reduce(
     (total, item) =>
@@ -85,7 +78,6 @@ function Cart({ show, handleClose }) {
                     variant="outline-secondary"
                     size="sm"
                     onClick={() =>
-                      item.quantity > 1 &&
                       updateQuantity(
                         item.id,
                         item.quantity - 1

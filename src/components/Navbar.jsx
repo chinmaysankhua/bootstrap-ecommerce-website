@@ -15,10 +15,10 @@ function NavigationBar({ onCartClick }) {
   const authCtx = useContext(AuthContext)
 
   const cartItemCount = cart.reduce(
-    (total, item) => total + item.quantity,
-    0
-  )
-
+  (total, item) =>
+    total + (item?.quantity || 0),
+  0
+)
   const handleLogout = () => {
     authCtx.logout()
   }

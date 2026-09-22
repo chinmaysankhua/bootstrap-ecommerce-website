@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
 } from 'react'
 
@@ -32,7 +33,7 @@ const CartProvider = ({ children }) => {
       }
 
       const existingProduct = cart.find(
-        (item) => item.id === product.id
+        (item) => item?.id === product.id
       )
 
       const updatedProduct = existingProduct
@@ -67,19 +68,21 @@ const CartProvider = ({ children }) => {
         setCart((previousCart) => {
           const productExists =
             previousCart.some(
-              (item) => item.id === product.id
+              (item) => item?.id === product.id
             )
 
           if (productExists) {
             return previousCart.map((item) =>
-              item.id === product.id
+              item?.id === product.id
                 ? updatedProduct
                 : item
             )
           }
 
           return [
-            ...previousCart,
+            ...previousCart.filter(
+              (item) => item !== null
+            ),
             updatedProduct,
           ]
         })
@@ -123,7 +126,11 @@ const CartProvider = ({ children }) => {
         return
       }
 
-      const loadedCart = Object.values(data)
+      const loadedCart = Object.values(data).filter(
+        (item) =>
+          item !== null &&
+          item !== undefined
+      )
 
       setCart(loadedCart)
     } catch (error) {
@@ -133,6 +140,10 @@ const CartProvider = ({ children }) => {
       )
     }
   }, [isLoggedIn, token, userId])
+
+  useEffect(() => {
+    fetchCart()
+  }, [fetchCart])
 
   const updateQuantity = useCallback(
     async (productId, quantity) => {
@@ -146,7 +157,7 @@ const CartProvider = ({ children }) => {
       }
 
       const existingProduct = cart.find(
-        (item) => item.id === productId
+        (item) => item?.id === productId
       )
 
       if (!existingProduct) {
@@ -178,7 +189,7 @@ const CartProvider = ({ children }) => {
 
         setCart((previousCart) =>
           previousCart.map((item) =>
-            item.id === productId
+            item?.id === productId
               ? updatedProduct
               : item
           )
@@ -221,7 +232,7 @@ const CartProvider = ({ children }) => {
 
         setCart((previousCart) =>
           previousCart.filter(
-            (item) => item.id !== productId
+            (item) => item?.id !== productId
           )
         )
       } catch (error) {
